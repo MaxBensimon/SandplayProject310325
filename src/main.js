@@ -44,6 +44,9 @@ scene.add(ambientLight)
 
 let isShiftPressed = false
 let isRemoving = false
+let isControlPressed = false
+let isAdding = false
+let checkInactive
 
 // Slider value from DOM
 const slider = document.getElementById('overlaySphereSize')
@@ -163,7 +166,15 @@ document.addEventListener('keydown', (event) =>
   if (event.key === 'Shift')
   {
     isShiftPressed = true
-    scene.add(overlaySphere);
+    overlayMat.color = new THREE.Color('#ff0000')
+    scene.add(overlaySphere)
+  }
+
+  if (event.key === 'Control')
+  {
+    isControlPressed = true
+    overlayMat.color = new THREE.Color('#00ff3c')
+    scene.add(overlaySphere)
   }
 
   if (event.key.toLowerCase() === '1')
@@ -193,9 +204,12 @@ document.addEventListener('mousedown', (event) =>
 {
   if (isShiftPressed)
     isRemoving = true
+  if (isControlPressed)
+    isAdding = true
 })
 document.addEventListener('mouseup', () => {
   isRemoving = false
+  isAdding = false
 })
 
 // Key up event
@@ -206,12 +220,17 @@ document.addEventListener('keyup', (event) =>
     isShiftPressed = false
     scene.remove(overlaySphere)
   }
+  if (event.key === 'Control')
+    {
+      isControlPressed = false
+      scene.remove(overlaySphere)
+    }
 })
 
 // Move mouse event
 document.addEventListener('mousemove', (event) =>
 {
-  if (!isShiftPressed)
+  if (!isShiftPressed && !isControlPressed)
     return
 
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1
@@ -249,7 +268,7 @@ function checkSphereCollision()
 
   for (let i = 0; i < totalCount; i++)
   {
-    if (!activeInstances[i])
+    if (checkInactive ? activeInstances[i] : !activeInstances[i])
       continue
 
     instancedMesh.getMatrixAt(i, tempMatrix)
@@ -290,6 +309,35 @@ function removeCubes(collidedIndices)
   instancedMesh.instanceMatrix.needsUpdate = true
 }
 
+function addCubes(collidedIndices)
+{
+  const matrix = new THREE.Matrix4()
+  const position = new THREE.Vector3()
+
+  // For hver ting, der collides med:
+  collidedIndices.forEach(index =>
+  {
+    // Hvis den IKKE er active (ikke meget lille):
+    if (!activeInstances[index])
+    {
+      console.log('Working...')
+
+      // Få fat på den specifikke cube i meshen:
+      instancedMesh.getMatrixAt(index, matrix)
+      // Bryd den del ned som en Quaternion og en Vector3
+      matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3())
+
+      // Gør den stor igen omkring dens position
+      matrix.makeScale(1, 1, 1).setPosition(position)
+      instancedMesh.setMatrixAt(index, matrix)
+
+      // Gør cuben aktiv
+      activeInstances[index] = true
+    }
+  })
+  // Opdatér instancedMeshen
+  instancedMesh.instanceMatrix.needsUpdate = true
+}
 
 
 
@@ -305,7 +353,8 @@ renderer.setSize(sizes.width, sizes.height)
 })
 
 // Defines a loop that works kind of like unity's Update method
-const loop = () => {
+const loop = () =>
+{
 controls.update()
 
 if (isRemoving)
@@ -314,6 +363,15 @@ if (isRemoving)
   if (collidedIndices.length > 0)
   {
     removeCubes(collidedIndices)
+  }
+}
+
+if (isAdding)
+{
+  const collidedIndices = checkSphereCollision(true)
+  if (collidedIndices.length > 0)
+  {
+    addCubes(collidedIndices)
   }
 }
 
