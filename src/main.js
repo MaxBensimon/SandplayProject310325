@@ -45,6 +45,13 @@ scene.add(ambientLight)
 let isShiftPressed = false
 let isRemoving = false
 
+// Slider value from DOM
+const slider = document.getElementById('overlaySphereSize')
+const sliderValue = document.getElementById('sliderValue')
+
+// Størrelsen på overlaySphere er altid sliderens value.
+var overlaySphereSize = parseFloat(slider.value);
+
 // Raycast
 const raycaster = new THREE.Raycaster();
 
@@ -55,7 +62,7 @@ const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
 var pointer = new THREE.Vector2()
 
 // Overlay Sphere
-const overlayGeo = new THREE.SphereGeometry(.75, 10, 10)
+const overlayGeo = new THREE.SphereGeometry(overlaySphereSize, 32, 16)
 const overlayMat = new THREE.MeshBasicMaterial(
   {
     color: 0xff0000,
@@ -68,21 +75,9 @@ const overlaySphere = new THREE.Mesh(overlayGeo, overlayMat);
 //overlaySphere.position.y = 1
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // Grid
 var gridSize = 10
-var gridDivisions = 80
+var gridDivisions = 100
 var layers = 10
 const totalCount = gridDivisions * gridDivisions * layers;
 const cellsPerLayer = gridDivisions * gridDivisions
@@ -228,6 +223,19 @@ document.addEventListener('mousemove', (event) =>
 
   overlaySphere.position.x = intersection.x;
   overlaySphere.position.z = intersection.z;
+})
+
+// Håndtering af sliderens værdi:
+slider.addEventListener('input', function()
+{
+  // Først sættes værdien af overlaySphere
+  overlaySphereSize = parseFloat(this.value);
+  sliderValue.textContent = overlaySphereSize.toFixed(1);
+
+  // Den gamle geo fjernes fra memory
+  overlaySphere.geometry.dispose();
+  // Ny geo bliver lavet med værdien fra slideren
+  overlaySphere.geometry = new THREE.SphereGeometry(overlaySphereSize, 32, 16);
 })
 
 function checkSphereCollision()
