@@ -257,8 +257,15 @@ slider.addEventListener('input', function()
   overlaySphere.geometry = new THREE.SphereGeometry(overlaySphereSize, 32, 16);
 })
 
-function checkSphereCollision()
+function checkSphereCollision(forAdding = false)
 {
+  // Den her metode skal kunne tjekke om noget er aktive eller ej. Det gør den med true/false:
+  // Hvis noget er true, så kan det fjernes og ikke tilføjes
+  // Hvis noget er false (se forAdding), så kan det tilføjes og ikke fjernes.
+  // Altså: Hvis activeInstances[i] == false, så kan den tilføjes og vice versa.
+  // Standarden er true, da det er det som function er refaktoreret af.
+
+
   const spherePos = overlaySphere.position
   const sphereRadius = overlaySphere.geometry.parameters.radius
   const collidedIndices = []
@@ -268,9 +275,6 @@ function checkSphereCollision()
 
   for (let i = 0; i < totalCount; i++)
   {
-    if (checkInactive ? activeInstances[i] : !activeInstances[i])
-      continue
-
     instancedMesh.getMatrixAt(i, tempMatrix)
     tempMatrix.decompose(tempPosition, new THREE.Quaternion(), new THREE.Vector3())
 
@@ -359,7 +363,7 @@ controls.update()
 
 if (isRemoving)
 {
-  const collidedIndices = checkSphereCollision()
+  const collidedIndices = checkSphereCollision(false)
   if (collidedIndices.length > 0)
   {
     removeCubes(collidedIndices)
