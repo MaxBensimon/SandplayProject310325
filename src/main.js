@@ -38,6 +38,16 @@ scene.add(ambientLight)
 
 
 
+// Static geometry
+const waterMat = new THREE.MeshStandardMaterial({color: "#00bfff"})
+
+const bottomCube = new THREE.BoxGeometry(10, .1, 10)
+
+const bottomWaterCube = new THREE.Mesh(bottomCube, waterMat)
+
+bottomWaterCube.position.y = -1.25 // Lige under det nederst lag, hvis der er 12 lag.
+
+scene.add(bottomWaterCube)
 
 
 
@@ -46,7 +56,6 @@ let isShiftPressed = false
 let isRemoving = false
 let isControlPressed = false
 let isAdding = false
-let checkInactive
 
 // Slider value from DOM
 const slider = document.getElementById('overlaySphereSize')
@@ -81,7 +90,7 @@ const overlaySphere = new THREE.Mesh(overlayGeo, overlayMat);
 // Grid
 var gridSize = 10
 var gridDivisions = 100
-var layers = 10
+var layers = 12
 const totalCount = gridDivisions * gridDivisions * layers;
 const cellsPerLayer = gridDivisions * gridDivisions
 
@@ -116,10 +125,16 @@ for (let height = 0; height < layers; height++)
     }
   }
 }
+
 instancedMesh.computeBoundingSphere();
 scene.add(instancedMesh);
 
 const activeInstances = new Array(totalCount).fill(true) // De cubes der ikke er væk.
+
+for (let i = layers; i > 5; i--) // Fjerner de øverste lag (ved 'layers = 12' vil 'i > 5' fjerne halvdelen)
+{
+  removeLayer(i)
+}
 
 function HideRandomInstance(layer)
 {
@@ -249,7 +264,7 @@ slider.addEventListener('input', function()
 {
   // Først sættes værdien af overlaySphere
   overlaySphereSize = parseFloat(this.value);
-  sliderValue.textContent = overlaySphereSize.toFixed(1);
+  sliderValue.textContent = "Overlay sphere size: " + overlaySphereSize.toFixed(1);
 
   // Den gamle geo fjernes fra memory
   overlaySphere.geometry.dispose();
@@ -313,8 +328,43 @@ function removeCubes(collidedIndices)
   instancedMesh.instanceMatrix.needsUpdate = true
 }
 
+function removeLayer(layer)
+{
+  const startIndex = layer * cellsPerLayer
+  const endIndex = startIndex + cellsPerLayer
+
+  const matrix = new THREE.Matrix4()
+  const position = new THREE.Vector3()
+  let isUpdateNeeded = false
+
+  for (let i = startIndex; i < endIndex; i++)
+  {
+    if (activeInstances[i])
+    {
+      instancedMesh.getMatrixAt(i, matrix)
+      matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3())
+
+      matrix.makeScale(0, 0, 0,).setPosition(position)
+      instancedMesh.setMatrixAt(i, matrix)
+
+      activeInstances[i] = false
+      isUpdateNeeded = true
+    }
+  }
+  if (isUpdateNeeded)
+  {
+    instancedMesh.instanceMatrix.needsUpdate = true
+  }
+}
+
+let canAdd = true
+var addDelay = 200
 function addCubes(collidedIndices)
 {
+  if (!canAdd) return
+
+  canAdd = false
+
   const matrix = new THREE.Matrix4()
   const position = new THREE.Vector3()
 
@@ -324,8 +374,6 @@ function addCubes(collidedIndices)
     // Hvis den IKKE er active (ikke meget lille):
     if (!activeInstances[index])
     {
-      console.log('Working...')
-
       // Få fat på den specifikke cube i meshen:
       instancedMesh.getMatrixAt(index, matrix)
       // Bryd den del ned som en Quaternion og en Vector3
@@ -341,7 +389,86 @@ function addCubes(collidedIndices)
   })
   // Opdatér instancedMeshen
   instancedMesh.instanceMatrix.needsUpdate = true
+
+  // Timeout på add så det er lidt nemmere at styre
+  setTimeout(() => {
+    canAdd = true
+  }, addDelay)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Gravity
+function applyGravity()
+{
+  const matrix = new THREE.Matrix4()
+  const position = new THREE.Vector3()
+  let isGravityUpdateNeeded = false
+
+  for (let layer = layers - 1; layer > 0; layer--)
+  {
+    const layerStart = layer * cellsPerLayer
+    const layerBelowStart = (layer - 1) * cellsPerLayer
+
+    for (let i = 0; i < cellsPerLayer; i++)
+    {
+      const currentIndex = layerStart + i
+      const currentBelowIndex = layerBelowStart + i
+
+      // Lav kun operationer hvis det nuværende index har en active cube og det under IKKE har
+      if (activeInstances[currentIndex] && !activeInstances[currentBelowIndex])
+      {
+        instancedMesh.getMatrixAt(currentIndex, matrix)
+        matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3())
+
+        matrix.makeScale(0, 0, 0).setPosition(position)
+        instancedMesh.setMatrixAt(currentIndex, matrix)
+        activeInstances[currentIndex] = false
+
+        position.y -= cellSize
+        const newMatrix = new THREE.Matrix4().makeScale(1, 1, 1).setPosition(position)
+        instancedMesh.setMatrixAt(currentBelowIndex, newMatrix)
+        activeInstances[currentBelowIndex] = true
+
+        isGravityUpdateNeeded = true
+      }
+    }
+  }
+  if (isGravityUpdateNeeded)
+  {
+    instancedMesh.instanceMatrix.needsUpdate = true
+    return true
+  }
+  return false
+}
+
+function simulateGravity()
+{
+  let totalPasses = 0
+  const maxPasses = layers * 2
+
+  while (applyGravity() && totalPasses < maxPasses)
+    totalPasses
+}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -355,6 +482,15 @@ camera.aspect = sizes.width / sizes.height
 camera.updateProjectionMatrix()
 renderer.setSize(sizes.width, sizes.height)
 })
+
+
+// Jeg bør nok flytte kaldet af start
+start()
+function start()
+{
+  sliderValue.textContent = "Overlay sphere size: " + overlaySphereSize.toFixed(1);
+}
+
 
 // Defines a loop that works kind of like unity's Update method
 const loop = () =>
@@ -376,6 +512,7 @@ if (isAdding)
   if (collidedIndices.length > 0)
   {
     addCubes(collidedIndices)
+    simulateGravity()
   }
 }
 
