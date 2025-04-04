@@ -69,6 +69,9 @@ const raycaster = new THREE.Raycaster();
 
 // Plane
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
+// PlaneHelper
+// const planeHelper = new THREE.PlaneHelper(plane, 10, 0xf200ff);
+// scene.add(planeHelper);
 
 // Pointer
 var pointer = new THREE.Vector2()
@@ -130,6 +133,163 @@ instancedMesh.computeBoundingSphere();
 scene.add(instancedMesh);
 
 const activeInstances = new Array(totalCount).fill(true) // De cubes der ikke er væk.
+
+
+
+
+
+// Distance from cube to top stuff
+// function getDistanceFromTopCubeToPlane()
+// {
+//   let topLayer = -1
+//   for (let layer = layers - 1; layer >= 0; layer--)
+//   {
+//     const layerStart = layer * cellsPerLayer
+//     if (activeInstances.slice(layerStart, layerStart + cellsPerLayer).some(v => v))
+//     {
+//       topLayer = layer
+//       break;
+//     }
+//   }
+//   if (topLayer === -1)
+//     return null
+
+//   const topCubeY = (cellSize * topLayer) + cellSize - (cellSize * layers)
+//   return Math.abs(topCubeY)
+// }
+
+// let topCubeMarker = null
+// function highlightTopCube()
+// {
+//   if (topCubeMarker)
+//     scene.remove(topCubeMarker)
+
+//   const distance = getDistanceFromTopCubeToPlane()
+//   if (distance == null)
+//     return
+
+//   const markerGeo = new THREE.BoxGeometry(.1, .1, .1)
+//   const markerMat = new THREE.MeshBasicMaterial({ color: 0xf200ff })
+//   topCubeMarker = new THREE.Mesh(markerGeo, markerMat)
+
+//   topCubeMarker.position.y = distance
+//   scene.add(topCubeMarker);
+// }
+
+function getTopCubePosition()
+{
+  let topLayer = -1
+  for (let layer = layers - 1; layer >= 0; layer--)
+  {
+    const layerStart = layer * cellsPerLayer
+    if (activeInstances.slice(layerStart, layerStart + cellsPerLayer).some(v => v))
+    {
+      topLayer = layer
+      break
+    }
+  }
+  if (topLayer === -1) return null
+  
+  return (cellSize * topLayer) + (cellSize / 2) - (cellSize * layers)
+}
+
+let topCubeMarker = null
+function highlightTopCube()
+{
+  if (topCubeMarker)
+    scene.remove(topCubeMarker)
+  
+  const topY = getTopCubePosition()
+  if (topY === null)
+    return
+  
+  const markerGeo = new THREE.BoxGeometry(.1, .1, .1)
+  const markerMat = new THREE.MeshBasicMaterial({ color: 0xf200ff })
+  topCubeMarker = new THREE.Mesh(markerGeo, markerMat)
+  
+  topCubeMarker.position.y = topY
+  scene.add(topCubeMarker)
+}
+
+
+// Deep seek copy paste
+const columnTopMarkers = [];
+
+function updateColumnTopMarkers() {
+  const tops = [];
+    
+  for (let x = 0; x < gridDivisions; x++) {
+      for (let z = 0; z < gridDivisions; z++) {
+          // Find top cube in this column
+          for (let layer = layers - 1; layer >= 0; layer--) {
+              const index = (layer * cellsPerLayer) + (x * gridDivisions) + z;
+              if (activeInstances[index]) {
+                  const matrix = new THREE.Matrix4();
+                  instancedMesh.getMatrixAt(index, matrix);
+                  const position = new THREE.Vector3();
+                  matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
+                  tops.push({
+                      x: x,
+                      z: z,
+                      y: position.y,
+                      worldPos: position.clone()
+                  });
+                  break;
+              }
+          }
+      }
+  }
+  
+  console.log(tops)
+
+  return tops;
+
+    // // Clear previous markers
+    // columnTopMarkers.forEach(marker => scene.remove(marker));
+    // columnTopMarkers.length = 0;
+    
+    // // Initialize a grid to track top cubes
+    // const columnTops = new Array(gridDivisions * gridDivisions).fill(null);
+    
+    // // Find top cube for each column
+    // for (let layer = layers - 1; layer >= 0; layer--) {
+    //     for (let x = 0; x < gridDivisions; x++) {
+    //         for (let z = 0; z < gridDivisions; z++) {
+    //             const index = (layer * cellsPerLayer) + (x * gridDivisions) + z;
+                
+    //             if (activeInstances[index] && !columnTops[x * gridDivisions + z]) {
+    //                 // Found the top cube for this column
+    //                 const matrix = new THREE.Matrix4();
+    //                 instancedMesh.getMatrixAt(index, matrix);
+    //                 const position = new THREE.Vector3();
+    //                 matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
+                    
+    //                 // Store the position
+    //                 columnTops[x * gridDivisions + z] = position.clone();
+                    
+    //                 // Create a marker
+    //                 const markerGeo = new THREE.BoxGeometry(cellSize, cellSize, cellSize);
+    //                 const markerMat = new THREE.MeshBasicMaterial({ 
+    //                     color: 0xf200ff,
+    //                     transparent: true,
+    //                     opacity: 0.5
+    //                 });
+    //                 const marker = new THREE.Mesh(markerGeo, markerMat);
+    //                 marker.position.copy(position);
+    //                 marker.position.y += cellSize / 2; // Position at top surface
+    //                 scene.add(marker);
+    //                 columnTopMarkers.push(marker);
+    //             }
+    //         }
+    //     }
+    // }
+}
+
+
+
+
+
+
 
 for (let i = layers; i > 5; i--) // Fjerner de øverste lag (ved 'layers = 12' vil 'i > 5' fjerne halvdelen)
 {
@@ -324,6 +484,9 @@ function removeCubes(collidedIndices)
       activeInstances[index] = false
     }
   })
+
+  updateColumnTopMarkers()
+
   // Opdatér instancedMeshen
   instancedMesh.instanceMatrix.needsUpdate = true
 }
@@ -353,6 +516,8 @@ function removeLayer(layer)
   }
   if (isUpdateNeeded)
   {
+    updateColumnTopMarkers()
+
     instancedMesh.instanceMatrix.needsUpdate = true
   }
 }
@@ -387,6 +552,9 @@ function addCubes(collidedIndices)
       activeInstances[index] = true
     }
   })
+
+  updateColumnTopMarkers()
+
   // Opdatér instancedMeshen
   instancedMesh.instanceMatrix.needsUpdate = true
 
@@ -446,6 +614,8 @@ function applyGravity()
   }
   if (isGravityUpdateNeeded)
   {
+    updateColumnTopMarkers()
+
     instancedMesh.instanceMatrix.needsUpdate = true
     return true
   }
