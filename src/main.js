@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import "./style.css"
 import gsap from "gsap"
 import * as COMPONENTS from "./components.js"
+import * as MESHES from "./meshes.js"
 
 const sizes = COMPONENTS.sizes
 const scene = COMPONENTS.scene
@@ -9,6 +10,14 @@ const camera = COMPONENTS.camera
 const renderer = COMPONENTS.renderer
 const controls = COMPONENTS.controls
 scene.add(sizes, scene, camera, renderer)
+
+// Water
+scene.add(MESHES.bottomWaterCube)
+scene.add(MESHES.side1WaterCube)
+scene.add(MESHES.side2WaterCube)
+scene.add(MESHES.side3WaterCube)
+scene.add(MESHES.side4WaterCube)
+
 
 // Scene settings:
 scene.background = new THREE.Color("#ffffff")
@@ -38,26 +47,13 @@ scene.add(ambientLight)
 
 
 
-// Static geometry
-const waterMat = new THREE.MeshStandardMaterial({color: "#00bfff"})
-
-const bottomCube = new THREE.BoxGeometry(10, .1, 10)
-
-const bottomWaterCube = new THREE.Mesh(bottomCube, waterMat)
-
-bottomWaterCube.position.y = -1.25 // Lige under det nederst lag, hvis der er 12 lag.
-
-scene.add(bottomWaterCube)
-
-
-
 
 let isShiftPressed = false
 let isRemoving = false
 let isControlPressed = false
 let isAdding = false
 
-// Slider value from DOM
+// Slider value fra DOM
 const slider = document.getElementById('overlaySphereSize')
 const sliderValue = document.getElementById('sliderValue')
 
@@ -69,9 +65,18 @@ const raycaster = new THREE.Raycaster();
 
 // Plane
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
+
 // PlaneHelper
+// var isPlaneHelperActive = false
 // const planeHelper = new THREE.PlaneHelper(plane, 10, 0xf200ff);
-// scene.add(planeHelper);
+// //scene.add(planeHelper);
+
+let lastIntersection = new THREE.Vector3()
+let lastNormal = new THREE.Vector3(0, 1, 0)
+const tempMatrix = new THREE.Matrix4()
+const tempPosition = new THREE.Vector3();
+const tempQuaternion = new THREE.Quaternion();
+const tempScale = new THREE.Vector3();
 
 // Pointer
 var pointer = new THREE.Vector2()
@@ -107,6 +112,10 @@ const cubeMat = new THREE.MeshStandardMaterial({color: "#ffe6a1", roughness: 1})
 // InstancedMesh
 const instancedMesh = new THREE.InstancedMesh(cubeGeo, cubeMat, totalCount);
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+
+const raycastableObjects = [instancedMesh, MESHES.bottomWaterCube, MESHES.side1WaterCube, MESHES.side2WaterCube, MESHES.side3WaterCube, MESHES.side4WaterCube]
+
 
 let index = 0;
 const matrix = new THREE.Matrix4();
@@ -240,7 +249,7 @@ function updateColumnTopMarkers() {
       }
   }
   
-  console.log(tops)
+  //console.log(tops)
 
   return tops;
 
@@ -352,6 +361,18 @@ document.addEventListener('keydown', (event) =>
     scene.add(overlaySphere)
   }
 
+  // if (event.key.toLowerCase() == 'p')
+  // {
+  //   isPlaneHelperActive = !isPlaneHelperActive
+  //   if (isPlaneHelperActive)
+  //     scene.add(planeHelper)
+  //   else
+  //     scene.remove(planeHelper)
+  // }
+
+  // if (event.key.toLowerCase() == 'e')
+  //   plane.position.y -= 1
+
   if (event.key.toLowerCase() === '1')
   {
     HideRandomInstance(0);
@@ -405,6 +426,11 @@ document.addEventListener('keyup', (event) =>
 // Move mouse event
 document.addEventListener('mousemove', (event) =>
 {
+  // Der er noget mærkeligt i det her event. Når man ikke muser over InstancedMesh, så er der dårlig behaviour. Tingene opdatere ikke.
+  // Man kan heller ikke laver en ø i midten af en sø, hvis man har fjernet alle cubes. Jeg skal på en måde få raycasteren, eller den
+  // intersects den laver, til at forstå, at den godt må være over andet end InstancedMeshen...
+
+
   if (!isShiftPressed && !isControlPressed)
     return
 
@@ -412,11 +438,22 @@ document.addEventListener('mousemove', (event) =>
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1
 
   raycaster.setFromCamera(pointer, camera);
-  const intersection = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, intersection);
 
-  overlaySphere.position.x = intersection.x;
-  overlaySphere.position.z = intersection.z;
+
+  //const intersection = new THREE.Vector3()
+  const intersects = raycaster.intersectObject(instancedMesh)
+  //raycaster.ray.intersectPlane(plane, intersection)
+
+  if (intersects.length > 0)
+  {
+    lastIntersection.copy(intersects[0].point)
+    lastNormal.copy(intersects[0].face.normal)
+    
+    overlaySphere.position.copy(lastIntersection)
+  }
+
+  // overlaySphere.position.x = intersection.x;
+  // overlaySphere.position.z = intersection.z;
 })
 
 // Håndtering af sliderens værdi:
@@ -691,4 +728,4 @@ window.requestAnimationFrame(loop)
 }
 
 // Calling the loop
-loop();
+loop()
