@@ -53,18 +53,24 @@ let isRemoving = false
 let isControlPressed = false
 let isAdding = false
 
-// Slider value fra DOM
-const slider = document.getElementById('overlaySphereSize')
-const sliderValue = document.getElementById('sliderValue')
+// Slider values fra DOM
+const overlaySphereSlider = document.getElementById('overlaySphereSize')
+const overlaySphereSliderValue = document.getElementById('overlaySphereSliderValue')
 
-// Størrelsen på overlaySphere er altid sliderens value.
-var overlaySphereSize = parseFloat(slider.value);
+const addRemoveDelaySlider = document.getElementById('addRemoveDelay')
+const addRemoveDelaySliderValue = document.getElementById('addRemoveDelaySliderValue')
+
+// Størrelsen på overlaySphere er altid sliderens value
+var overlaySphereSize = parseFloat(overlaySphereSlider.value)
+
+// Hastigheden på addRemoveDelay er altid sliderens value
+var addRemoveDelay = parseFloat(addRemoveDelaySlider.value)
 
 // Raycast
 const raycaster = new THREE.Raycaster();
 
 // Plane
-const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
+//const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
 
 // PlaneHelper
 // var isPlaneHelperActive = false
@@ -105,6 +111,20 @@ const cellsPerLayer = gridDivisions * gridDivisions
 // Geting the size of a single cell in the grid
 const cellSize = gridSize / gridDivisions
 
+
+
+
+// Plane til under InstancedMesh, så der er noget at intersecte med.
+const fallbackPlane = new THREE.Mesh(new THREE.PlaneGeometry(gridSize, gridSize), new THREE.MeshBasicMaterial({visible: false})) // Nice måde at erklære en mesh på med færre linjer!
+fallbackPlane.rotation.x = -Math.PI/2 // Gør den horisontal
+fallbackPlane.position.y = (cellSize/2) - (cellSize * layers)
+scene.add(fallbackPlane)
+
+
+
+
+
+
 // Making some cubes based on the grid cell size
 const cubeGeo = new THREE.BoxGeometry(cellSize, cellSize, cellSize)
 const cubeMat = new THREE.MeshStandardMaterial({color: "#ffe6a1", roughness: 1})
@@ -113,8 +133,8 @@ const cubeMat = new THREE.MeshStandardMaterial({color: "#ffe6a1", roughness: 1})
 const instancedMesh = new THREE.InstancedMesh(cubeGeo, cubeMat, totalCount);
 instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
-
-const raycastableObjects = [instancedMesh, MESHES.bottomWaterCube, MESHES.side1WaterCube, MESHES.side2WaterCube, MESHES.side3WaterCube, MESHES.side4WaterCube]
+// De objects der må raycastes med. Bliver brugt i mousemove
+const raycastableObjects = [instancedMesh, fallbackPlane, MESHES.bottomWaterCube, MESHES.side1WaterCube, MESHES.side2WaterCube, MESHES.side3WaterCube, MESHES.side4WaterCube]
 
 
 let index = 0;
@@ -142,163 +162,6 @@ instancedMesh.computeBoundingSphere();
 scene.add(instancedMesh);
 
 const activeInstances = new Array(totalCount).fill(true) // De cubes der ikke er væk.
-
-
-
-
-
-// Distance from cube to top stuff
-// function getDistanceFromTopCubeToPlane()
-// {
-//   let topLayer = -1
-//   for (let layer = layers - 1; layer >= 0; layer--)
-//   {
-//     const layerStart = layer * cellsPerLayer
-//     if (activeInstances.slice(layerStart, layerStart + cellsPerLayer).some(v => v))
-//     {
-//       topLayer = layer
-//       break;
-//     }
-//   }
-//   if (topLayer === -1)
-//     return null
-
-//   const topCubeY = (cellSize * topLayer) + cellSize - (cellSize * layers)
-//   return Math.abs(topCubeY)
-// }
-
-// let topCubeMarker = null
-// function highlightTopCube()
-// {
-//   if (topCubeMarker)
-//     scene.remove(topCubeMarker)
-
-//   const distance = getDistanceFromTopCubeToPlane()
-//   if (distance == null)
-//     return
-
-//   const markerGeo = new THREE.BoxGeometry(.1, .1, .1)
-//   const markerMat = new THREE.MeshBasicMaterial({ color: 0xf200ff })
-//   topCubeMarker = new THREE.Mesh(markerGeo, markerMat)
-
-//   topCubeMarker.position.y = distance
-//   scene.add(topCubeMarker);
-// }
-
-function getTopCubePosition()
-{
-  let topLayer = -1
-  for (let layer = layers - 1; layer >= 0; layer--)
-  {
-    const layerStart = layer * cellsPerLayer
-    if (activeInstances.slice(layerStart, layerStart + cellsPerLayer).some(v => v))
-    {
-      topLayer = layer
-      break
-    }
-  }
-  if (topLayer === -1) return null
-  
-  return (cellSize * topLayer) + (cellSize / 2) - (cellSize * layers)
-}
-
-let topCubeMarker = null
-function highlightTopCube()
-{
-  if (topCubeMarker)
-    scene.remove(topCubeMarker)
-  
-  const topY = getTopCubePosition()
-  if (topY === null)
-    return
-  
-  const markerGeo = new THREE.BoxGeometry(.1, .1, .1)
-  const markerMat = new THREE.MeshBasicMaterial({ color: 0xf200ff })
-  topCubeMarker = new THREE.Mesh(markerGeo, markerMat)
-  
-  topCubeMarker.position.y = topY
-  scene.add(topCubeMarker)
-}
-
-
-// Deep seek copy paste
-const columnTopMarkers = [];
-
-function updateColumnTopMarkers() {
-  const tops = [];
-    
-  for (let x = 0; x < gridDivisions; x++) {
-      for (let z = 0; z < gridDivisions; z++) {
-          // Find top cube in this column
-          for (let layer = layers - 1; layer >= 0; layer--) {
-              const index = (layer * cellsPerLayer) + (x * gridDivisions) + z;
-              if (activeInstances[index]) {
-                  const matrix = new THREE.Matrix4();
-                  instancedMesh.getMatrixAt(index, matrix);
-                  const position = new THREE.Vector3();
-                  matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
-                  tops.push({
-                      x: x,
-                      z: z,
-                      y: position.y,
-                      worldPos: position.clone()
-                  });
-                  break;
-              }
-          }
-      }
-  }
-  
-  //console.log(tops)
-
-  return tops;
-
-    // // Clear previous markers
-    // columnTopMarkers.forEach(marker => scene.remove(marker));
-    // columnTopMarkers.length = 0;
-    
-    // // Initialize a grid to track top cubes
-    // const columnTops = new Array(gridDivisions * gridDivisions).fill(null);
-    
-    // // Find top cube for each column
-    // for (let layer = layers - 1; layer >= 0; layer--) {
-    //     for (let x = 0; x < gridDivisions; x++) {
-    //         for (let z = 0; z < gridDivisions; z++) {
-    //             const index = (layer * cellsPerLayer) + (x * gridDivisions) + z;
-                
-    //             if (activeInstances[index] && !columnTops[x * gridDivisions + z]) {
-    //                 // Found the top cube for this column
-    //                 const matrix = new THREE.Matrix4();
-    //                 instancedMesh.getMatrixAt(index, matrix);
-    //                 const position = new THREE.Vector3();
-    //                 matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
-                    
-    //                 // Store the position
-    //                 columnTops[x * gridDivisions + z] = position.clone();
-                    
-    //                 // Create a marker
-    //                 const markerGeo = new THREE.BoxGeometry(cellSize, cellSize, cellSize);
-    //                 const markerMat = new THREE.MeshBasicMaterial({ 
-    //                     color: 0xf200ff,
-    //                     transparent: true,
-    //                     opacity: 0.5
-    //                 });
-    //                 const marker = new THREE.Mesh(markerGeo, markerMat);
-    //                 marker.position.copy(position);
-    //                 marker.position.y += cellSize / 2; // Position at top surface
-    //                 scene.add(marker);
-    //                 columnTopMarkers.push(marker);
-    //             }
-    //         }
-    //     }
-    // }
-}
-
-
-
-
-
-
 
 for (let i = layers; i > 5; i--) // Fjerner de øverste lag (ved 'layers = 12' vil 'i > 5' fjerne halvdelen)
 {
@@ -426,47 +289,48 @@ document.addEventListener('keyup', (event) =>
 // Move mouse event
 document.addEventListener('mousemove', (event) =>
 {
-  // Der er noget mærkeligt i det her event. Når man ikke muser over InstancedMesh, så er der dårlig behaviour. Tingene opdatere ikke.
-  // Man kan heller ikke laver en ø i midten af en sø, hvis man har fjernet alle cubes. Jeg skal på en måde få raycasteren, eller den
-  // intersects den laver, til at forstå, at den godt må være over andet end InstancedMeshen...
-
-
   if (!isShiftPressed && !isControlPressed)
     return
 
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1
 
-  raycaster.setFromCamera(pointer, camera);
-
-
-  //const intersection = new THREE.Vector3()
-  const intersects = raycaster.intersectObject(instancedMesh)
-  //raycaster.ray.intersectPlane(plane, intersection)
-
+  raycaster.setFromCamera(pointer, camera)
+  const intersects = raycaster.intersectObjects(raycastableObjects, true)
+  
   if (intersects.length > 0)
   {
-    lastIntersection.copy(intersects[0].point)
-    lastNormal.copy(intersects[0].face.normal)
+    // Hvis der er intersection med noget, der er i racastbleObjects og ikke er fallbackPlane 
+    const validIntersect = intersects.find(i => i.object !== fallbackPlane) || intersects[0]
+    lastIntersection.copy(validIntersect.point)
+    
+    // Hvis der er intersection med fallbackPlane
+    if (validIntersect.object === fallbackPlane)
+    {
+      lastIntersection.x = Math.round(lastIntersection.x / cellSize) * cellSize
+      lastIntersection.z = Math.round(lastIntersection.z / cellSize) * cellSize
+    }
     
     overlaySphere.position.copy(lastIntersection)
   }
-
-  // overlaySphere.position.x = intersection.x;
-  // overlaySphere.position.z = intersection.z;
 })
 
 // Håndtering af sliderens værdi:
-slider.addEventListener('input', function()
+overlaySphereSlider.addEventListener('input', function()
 {
   // Først sættes værdien af overlaySphere
-  overlaySphereSize = parseFloat(this.value);
-  sliderValue.textContent = "Overlay sphere size: " + overlaySphereSize.toFixed(1);
+  overlaySphereSize = parseFloat(this.value)
+  overlaySphereSliderValue.textContent = "Overlay sphere size: " + overlaySphereSize.toFixed(1)
 
   // Den gamle geo fjernes fra memory
-  overlaySphere.geometry.dispose();
+  overlaySphere.geometry.dispose()
   // Ny geo bliver lavet med værdien fra slideren
-  overlaySphere.geometry = new THREE.SphereGeometry(overlaySphereSize, 32, 16);
+  overlaySphere.geometry = new THREE.SphereGeometry(overlaySphereSize, 32, 16)
+})
+addRemoveDelaySlider.addEventListener('input', function()
+{
+  addRemoveDelay = parseFloat(this.value)
+  addRemoveDelaySliderValue.textContent = "Add/Remove delay speed: " + addRemoveDelay.toFixed(1)
 })
 
 function checkSphereCollision(forAdding = false)
@@ -497,8 +361,12 @@ function checkSphereCollision(forAdding = false)
   return collidedIndices
 }
 
+let canRemove = true
 function removeCubes(collidedIndices)
 {
+  if (!canRemove) return
+  canRemove = false
+
   const matrix = new THREE.Matrix4()
   const position = new THREE.Vector3()
 
@@ -522,10 +390,15 @@ function removeCubes(collidedIndices)
     }
   })
 
-  updateColumnTopMarkers()
+  //updateColumnTopMarkers()
 
   // Opdatér instancedMeshen
   instancedMesh.instanceMatrix.needsUpdate = true
+  
+  // Timeout på add så det er lidt nemmere at styre
+  setTimeout(() => {
+    canRemove = true
+  }, addRemoveDelay)
 }
 
 function removeLayer(layer)
@@ -553,14 +426,13 @@ function removeLayer(layer)
   }
   if (isUpdateNeeded)
   {
-    updateColumnTopMarkers()
+    //updateColumnTopMarkers()
 
     instancedMesh.instanceMatrix.needsUpdate = true
   }
 }
 
 let canAdd = true
-var addDelay = 200
 function addCubes(collidedIndices)
 {
   if (!canAdd) return
@@ -590,7 +462,7 @@ function addCubes(collidedIndices)
     }
   })
 
-  updateColumnTopMarkers()
+  //>updateColumnTopMarkers()
 
   // Opdatér instancedMeshen
   instancedMesh.instanceMatrix.needsUpdate = true
@@ -598,7 +470,7 @@ function addCubes(collidedIndices)
   // Timeout på add så det er lidt nemmere at styre
   setTimeout(() => {
     canAdd = true
-  }, addDelay)
+  }, addRemoveDelay)
 }
 
 
@@ -651,7 +523,7 @@ function applyGravity()
   }
   if (isGravityUpdateNeeded)
   {
-    updateColumnTopMarkers()
+    //updateColumnTopMarkers()
 
     instancedMesh.instanceMatrix.needsUpdate = true
     return true
@@ -695,7 +567,8 @@ renderer.setSize(sizes.width, sizes.height)
 start()
 function start()
 {
-  sliderValue.textContent = "Overlay sphere size: " + overlaySphereSize.toFixed(1);
+  overlaySphereSliderValue.textContent = "Overlay sphere size: " + overlaySphereSize.toFixed(1)
+  addRemoveDelaySliderValue.textContent = "Add/Remove delay speed: " + addRemoveDelay.toFixed(1)
 }
 
 
@@ -710,6 +583,7 @@ if (isRemoving)
   if (collidedIndices.length > 0)
   {
     removeCubes(collidedIndices)
+    simulateGravity()
   }
 }
 
