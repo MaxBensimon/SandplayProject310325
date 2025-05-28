@@ -113,15 +113,11 @@ const cellSize = gridSize / gridDivisions
 
 
 
-
 // Plane til under InstancedMesh, så der er noget at intersecte med.
 const fallbackPlane = new THREE.Mesh(new THREE.PlaneGeometry(gridSize, gridSize), new THREE.MeshBasicMaterial({visible: false})) // Nice måde at erklære en mesh på med færre linjer!
 fallbackPlane.rotation.x = -Math.PI/2 // Gør den horisontal
 fallbackPlane.position.y = (cellSize/2) - (cellSize * layers)
 scene.add(fallbackPlane)
-
-
-
 
 
 
